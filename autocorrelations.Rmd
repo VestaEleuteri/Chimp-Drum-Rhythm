@@ -1,0 +1,183 @@
+---
+title: "Drumming chimps: ACF"
+author: Jelle van der Werff
+date: "`r Sys.Date()`"
+output:
+  rmdformats::material:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+    cards: true
+bibliography: references.bib
+csl: apa.csl
+---
+
+```{r preliminaries, echo = FALSE, warning = FALSE}
+# for easy loading of packages
+if (!require("pacman")) install.packages("pacman")
+
+# load packages
+p_load("plyr", "ggplot2", "here", "knitr", "kableExtra", "psych", "dplyr", "rmdformats")
+
+here <- here::here
+
+# for relative file paths (e.g. here('Input', 'file.csv'))
+here::i_am(file.path("autocorrelations.Rmd"))
+
+# load data
+ihis <- read.csv(here("dataframes", "drumming_long.csv"))
+
+# load custom ggplot theme
+source(here("theme_drumming.R"))
+
+# Reorder subspecies
+ihis$Subspecies <- factor(ihis$Subspecies, levels = c("Western", "Eastern"))
+
+# Set knitr options
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, out.width = "100%", comment = NA)
+```
+
+# All bouts
+```{r get-autocorrelations}
+# get lag-one autocorrelations by subspecies and bout
+acf.cv <- ddply(ihis, .(Subspecies, Population, Community, Individual, Drumming_bout, N_hits), summarize,
+    lag_one = acf(IBI, lag.max = 1, plot = FALSE)$acf[2],
+    cv = sd(IBI) / mean(IBI)
+)
+
+acf.cv.bysubspecies <- ddply(acf.cv, .(Subspecies), summarize,
+    mean_lag_one = mean(lag_one, na.rm = TRUE),
+    sd_lag_one = sd(lag_one, na.rm = TRUE),
+    mean_cv = mean(cv, na.rm = TRUE),
+    sd_cv = sd(cv, na.rm = TRUE)
+)
+
+kable(acf.cv.bysubspecies, format = "html", escape = FALSE) %>%
+    kable_styling("striped", full_width = FALSE)
+```
+
+```{r plot-autocorrelations}
+ggplot(acf.cv, aes(y = Subspecies, x = lag_one, colour = Subspecies)) +
+    stat_summary(geom = "pointrange", show.legend = FALSE) +
+    theme_drumming() +
+    labs(y = "", x = "") +
+    coord_cartesian(xlim = c(-0.5, 0)) +
+    scale_x_continuous(breaks = c(-0.5, -0.25, 0)) +
+    theme(
+        panel.background = element_rect(fill = "transparent", color = NA), # Make panel background transparent
+        plot.background = element_rect(fill = "transparent", color = NA), # Make plot background transparent
+        panel.grid.major = element_blank(), # Remove major grid lines
+        panel.grid.minor = element_blank(), # Remove minor grid lines
+        panel.grid.major.x = element_line(color = "gray80", size = 0.5), # Add vertical major grid lines
+        panel.grid.major.y = element_blank(), # Remove major horizontal grid lines
+        legend.background = element_rect(fill = "transparent", color = NA), # Make legend background transparent
+        legend.box.background = element_rect(fill = "transparent", color = NA) # Make legend box background transparent
+    )
+ggsave(here("plots", "acf_by_subspecies.png"), height = 4, width = 4)
+ggsave(here("plots", "acf_by_subspecies.svg"), height = 4, width = 4)
+```
+
+
+```{r do-t-test}
+# Check equality of variances
+acf.east <- acf.cv$lag_one[acf.cv$Subspecies == "Eastern"]
+acf.west <- acf.cv$lag_one[acf.cv$Subspecies == "Western"]
+var.test(acf.east, acf.west)
+
+# Do t-test
+acf.t.test <- t.test(acf.east, acf.west)
+
+# ACF by subspecies
+acf.by.subspecies <- as.data.frame(list(
+    test_statistic = acf.t.test$statistic,
+    p_value = acf.t.test$p.value,
+    cohens_d = mean(acf.east, na.rm = TRUE) - mean(acf.west, na.rm = TRUE) / sqrt((var(acf.east, na.rm = TRUE) + var(acf.west, na.rm = TRUE)) / 2),
+    df = acf.t.test$parameter,
+    method = acf.t.test$method
+))
+
+kable(acf.by.subspecies, format = "html", escape = FALSE) %>%
+    kable_styling("striped", full_width = FALSE)
+```
+
+
+# Only bouts with 5 or more hits
+
+```{r filter-5plushits}
+
+ihis.5plushits <- ihis
+ihis.5plushits <- ihis.5plushits %>%
+  group_by(Drumming_bout) %>%
+  filter(n() >= 4) %>% # remove drums < 4 IHIs
+  group_by(Com_indiv_code) %>% # remove individuals with <3 drums
+  filter(n_distinct(Drumming_bout) >= 3) %>%
+  group_by(Community) %>% # remove communities with <1 individual
+  filter(n_distinct(Individual) > 1) %>%
+  ungroup()
+
+```
+
+```{r get-autocorrelations-5plushits}
+# get lag-one autocorrelations by subspecies and bout
+acf.cv.5plushits <- ddply(ihis.5plushits, .(Subspecies, Population, Community, Individual, Drumming_bout, N_hits), summarize,
+    lag_one = acf(IBI, lag.max = 1, plot = FALSE)$acf[2],
+    cv = sd(IBI) / mean(IBI)
+)
+
+acf.cv.bysubspecies.5plushits <- ddply(acf.cv.5plushits, .(Subspecies), summarize,
+    mean_lag_one = mean(lag_one, na.rm = TRUE),
+    sd_lag_one = sd(lag_one, na.rm = TRUE),
+    mean_cv = mean(cv, na.rm = TRUE),
+    sd_cv = sd(cv, na.rm = TRUE)
+)
+
+kable(acf.cv.bysubspecies.5plushits, format = "html", escape = FALSE) %>%
+    kable_styling("striped", full_width = FALSE)
+```
+
+```{r plot-autocorrelations-5plushits}
+ggplot(acf.cv.5plushits, aes(y = Subspecies, x = lag_one, colour = Subspecies)) +
+    stat_summary(geom = "pointrange", show.legend = FALSE) +
+    theme_drumming() +
+    labs(y = "", x = "") +
+    coord_cartesian(xlim = c(-0.5, 0)) +
+    scale_x_continuous(breaks = c(-0.5, -0.25, 0)) +
+    theme(
+        panel.background = element_rect(fill = "transparent", color = NA), # Make panel background transparent
+        plot.background = element_rect(fill = "transparent", color = NA), # Make plot background transparent
+        panel.grid.major = element_blank(), # Remove major grid lines
+        panel.grid.minor = element_blank(), # Remove minor grid lines
+        panel.grid.major.x = element_line(color = "gray80", size = 0.5), # Add vertical major grid lines
+        panel.grid.major.y = element_blank(), # Remove major horizontal grid lines
+        legend.background = element_rect(fill = "transparent", color = NA), # Make legend background transparent
+        legend.box.background = element_rect(fill = "transparent", color = NA) # Make legend box background transparent
+    )
+ggsave(here("plots", "acf_by_subspecies_5ormorehits.png"), height = 4, width = 4)
+ggsave(here("plots", "acf_by_subspecies_5ormorehits.svg"), height = 4, width = 4)
+```
+
+
+```{r do-t-test-5plushits}
+# Check equality of variances
+acf.5plushits.east <- acf.cv.5plushits$lag_one[acf.cv.5plushits$Subspecies == "Eastern"]
+acf.5plushits.west <- acf.cv.5plushits$lag_one[acf.cv.5plushits$Subspecies == "Western"]
+var.test(acf.5plushits.east, acf.5plushits.west)
+
+# Do t-test
+acf.5plushits.t.test <- t.test(acf.5plushits.east, acf.5plushits.west)
+
+# ACF by subspecies
+acf.5plushits.by.subspecies <- as.data.frame(list(
+    test_statistic = acf.5plushits.t.test$statistic,
+    p_value = acf.5plushits.t.test$p.value,
+    cohens_d = mean(acf.5plushits.east, na.rm = TRUE) - mean(acf.5plushits.west, na.rm = TRUE) / sqrt((var(acf.5plushits.east, na.rm = TRUE) +
+        var(acf.5plushits.west, na.rm = TRUE)) / 2),
+    df = acf.5plushits.t.test$parameter,
+    method = acf.5plushits.t.test$method
+))
+
+kable(acf.5plushits.by.subspecies, format = "html", escape = FALSE) %>%
+    kable_styling("striped", full_width = FALSE)
+```

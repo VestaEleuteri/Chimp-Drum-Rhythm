@@ -1,0 +1,152 @@
+---
+title: "Drumming chimps: Stability over time"
+author: Vesta Eleuteri & Jelle van der Werff
+date: "`r Sys.Date()`"
+output:
+  rmdformats::material:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+    cards: true
+    code_folding: hide
+bibliography: references.bib
+csl: apa.csl
+---
+
+# Introduction
+Here, we check the stability of our observations over recording time, by looking at the variables that are used in the pDFA analysis (see paper).
+
+# Preliminaries
+
+```{r load-packages-and-data, echo = FALSE, warning = FALSE}
+# for easy loading of packages
+if (!require("pacman")) install.packages("pacman")
+
+# load packages
+p_load("here", "ggplot2", "lme4")
+
+here <- here::here
+
+# for relative file paths (e.g. here('Input', 'file.csv'))
+here::i_am(file.path("ratios.Rmd"))
+
+# load data
+ratios <- read.csv(here("dataframes", "drumming_ratios.csv"))
+ibis <- read.csv(here("dataframes", "drumming_long.csv"))
+drumming.wide <- read.csv(here("dataframes", "drumming_wide.csv"))
+ratios$Subspecies <- factor(ratios$Subspecies, levels = c("Western", "Eastern"))
+ibis$Subspecies <- factor(ibis$Subspecies, levels = c("Western", "Eastern"))
+drumming.wide$Subspecies <- factor(drumming.wide$Subspecies, levels = c("Western", "Eastern"))
+
+
+# load custom ggplot theme
+source(here("theme_drumming.R"))
+
+# set knitr options
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, out.width = "100%", fig.height = 10, fig.width = 10, comment = NA)
+```
+
+```{r datetime-objects}
+# convert recording date to datetime object
+drumming.wide$Recording_date <- as.Date(drumming.wide$Date, format = "%d.%m.%y")
+```
+
+# Distribution of recording dates
+
+```{r recording-dates}
+ggplot(drumming.wide, aes(x = Recording_date, fill = Subspecies, colour = Subspecies)) +
+    geom_histogram(alpha = 0.6, binwidth = 3, show.legend = FALSE) +
+    theme_drumming() +
+    labs(x = "Recording date", y = "Counts", title = "Number of bouts by recording date") +
+    facet_wrap(~Subspecies, ncol = 1) +
+    scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+# Stability over time
+## nPVI
+```{r stability-over-time-npvi-plot}
+# nPVI
+ggplot(drumming.wide, aes(x = Recording_date, y = Bout_npvi, color = Subspecies)) +
+    geom_point(alpha = 0.4, show.legend = FALSE) +
+    geom_smooth(method = "lm", show.legend = FALSE) +
+    theme_drumming() +
+    labs(x = "Recording date", y = "nPVI", title = "Stability of nPVI over recording dates") +
+    facet_wrap(~Subspecies, ncol = 1) +
+    scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("plots", "stability_npvi.svg"), width = 10, height = 10)
+ggsave(here("plots", "stability_npvi.png"), width = 10, height = 10)
+```
+
+```{r stability-over-time-npvi-model}
+mod <- lmer(Bout_npvi ~ Days_before_2024 * Subspecies + (1 | Com_indiv_code), data = drumming.wide, REML = FALSE)
+red <- lmer(Bout_npvi ~ Days_before_2024 + Subspecies + (1 | Com_indiv_code), data = drumming.wide, REML = FALSE)
+chisq.npvi <- as.data.frame(anova(red, mod, test = "chisq"))
+chisq.npvi
+```
+
+## Coefficient of variation
+```{r stability-over-time-cv}
+ggplot(drumming.wide, aes(x = Recording_date, y = Bout_cv, color = Subspecies)) +
+    geom_point(alpha = 0.4, show.legend = FALSE) +
+    geom_smooth(method = "lm", show.legend = FALSE) +
+    theme_drumming() +
+    labs(x = "Recording date", y = "CV", title = "Stability of CV over recording dates") +
+    facet_wrap(~Subspecies, ncol = 1) +
+    scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("plots", "stability_cv.svg"), width = 10, height = 10)
+ggsave(here("plots", "stability_cv.png"), width = 10, height = 10)
+```
+
+```{r stability-over-time-cv-model}
+mod <- lmer(Bout_cv ~ Days_before_2024 * Subspecies + (1 | Com_indiv_code), data = drumming.wide, REML = FALSE)
+red <- lmer(Bout_cv ~ Days_before_2024 + Subspecies + (1 | Com_indiv_code), data = drumming.wide, REML = FALSE)
+chisq.cv <- as.data.frame(anova(red, mod, test = "chisq"))
+chisq.cv
+```
+
+## Entropy
+```{r stability-over-time-entropy}
+ggplot(drumming.wide, aes(x = Recording_date, y = Bout_entropy, color = Subspecies)) +
+    geom_point(alpha = 0.4, show.legend = FALSE) +
+    geom_smooth(method = "lm", show.legend = FALSE) +
+    theme_drumming() +
+    labs(x = "Recording date", y = "Entropy", title = "Stability of entropy over recording dates") +
+    facet_wrap(~Subspecies, ncol = 1) +
+    scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("plots", "stability_entropy.svg"), width = 10, height = 10)
+ggsave(here("plots", "stability_entropy.png"), width = 10, height = 10)
+```
+
+```{r stability-over-time-entropy-model}
+mod <- lmer(Bout_entropy ~ Days_before_2024 * Subspecies + (1 | Com_indiv_code), data = drumming.wide, REML = FALSE)
+red <- lmer(Bout_entropy ~ Days_before_2024 + Subspecies + (1 | Com_indiv_code), data = drumming.wide, REML = FALSE)
+chisq.entropy <- as.data.frame(anova(red, mod, test = "chisq"))
+chisq.entropy
+```
+
+## Number of hits
+```{r stability-over-time-n-hits}
+ggplot(drumming.wide, aes(x = Days_before_2024, y = N_hits, color = Subspecies)) +
+    geom_point(alpha = 0.4, show.legend = FALSE) +
+    geom_smooth(method = "lm", show.legend = FALSE) +
+    theme_drumming() +
+    labs(x = "Days before 2024", y = "Number of hits", title = "Stability of number of hits over recording dates") +
+    facet_wrap(~Subspecies, ncol = 1) +
+    scale_x_reverse()
+ggsave(here("plots", "stability_n_hits.svg"), width = 10, height = 10)
+ggsave(here("plots", "stability_n_hits.png"), width = 10, height = 10)
+```
+
+```{r stability-over-time-n-hits-model}
+mod <- lmer(N_hits ~ Days_before_2024 * Subspecies + (1 | Com_indiv_code), data = drumming.wide, REML = FALSE)
+red <- lmer(N_hits ~ Days_before_2024 + Subspecies + (1 | Com_indiv_code), data = drumming.wide, REML = FALSE)
+chisq.N_hits <- as.data.frame(anova(red, mod, test = "chisq"))
+chisq.N_hits
+```
